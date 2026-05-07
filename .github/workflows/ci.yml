@@ -2,9 +2,9 @@ name: AI Service CI
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "main"]
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: [ "main"]
 
 jobs:
   build-and-test:
@@ -16,10 +16,10 @@ jobs:
       with:
         fetch-depth: 0  # SonarQube'un kod analizini doğru yapabilmesi için tüm commit geçmişi gerekir.
 
-    - name: Set up Python 3.10
+    - name: Set up Python 3.13
       uses: actions/setup-python@v5
       with:
-        python-version: "3.10"
+        python-version: "3.13"
         cache: 'pip'  # Bağımlılıkların daha hızlı kurulması için pip önbelleğe alınır.
 
     - name: Install dependencies

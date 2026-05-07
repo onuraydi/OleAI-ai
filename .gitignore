@@ -21,3 +21,4 @@ htmlcov/
 
 # SonarQube
 .scannerwork/
+sonar-project.properties

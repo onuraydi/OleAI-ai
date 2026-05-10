@@ -6,3 +6,4 @@ numpy
 pytest
 pytest-cov
 ruff
+pydantic-settings

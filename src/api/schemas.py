@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
@@ -26,8 +26,7 @@ class RecipeInteraction(BaseModel):
     interaction_type: str = Field(..., alias="type")
     interaction_date: datetime = Field(..., alias="date")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 class RecommendationRequest(BaseModel):
     user_id: UUID = Field(..., alias="id")
@@ -38,15 +37,13 @@ class RecommendationRequest(BaseModel):
     excluded_categories: List[str] = Field(default_factory=list, alias="excludedCategories")
     mode: RecommendationMode = Field(default=RecommendationMode.DEFAULT)
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 class RecipeScore(BaseModel):
     recipe_id: UUID = Field(..., alias="recipeId")
     score: float
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 class AiRecommendationResponse(BaseModel):
     recipes: List[RecipeScore] = Field(default_factory=list)

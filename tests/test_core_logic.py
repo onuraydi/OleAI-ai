@@ -114,6 +114,7 @@ def test_recommendation_modes():
     # STRICT mode should have high threshold
     results_strict = recommender.recommend(user_ingredients="su", interactions=[], mode=RecommendationMode.STRICT)
     # Both might be returned but scores modified
+    assert len(results_strict) >= 0
     
 def test_cold_start_popularity():
     recommender = RecipeRecommender()

@@ -54,3 +54,5 @@ class RecipeSyncRequest(BaseModel):
     ingredients: str
     category: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(populate_by_name=True)

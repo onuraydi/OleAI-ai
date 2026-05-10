@@ -80,3 +80,68 @@ def test_for_you_mode_logic():
     
     assert len(results) > 0
     assert results[0][0] == recipe_like # Pizza should be top even with empty pantry
+
+def test_incremental_add():
+    recommender = RecipeRecommender()
+    recipe1 = {"id": uuid4(), "title": "A", "ingredients": "su", "category": "C"}
+    recommender.add_recipe(recipe1)
+    
+    assert len(recommender.recipe_ids) == 1
+    assert recommender.recipe_matrix is not None
+    
+    recipe2 = {"id": uuid4(), "title": "B", "ingredients": "tuz", "category": "C"}
+    recommender.add_recipe(recipe2)
+    assert len(recommender.recipe_ids) == 2
+    assert recommender.recipe_matrix.shape[0] == 2
+
+def test_recommendation_modes():
+    from src.api.schemas import RecommendationMode
+    recommender = RecipeRecommender()
+    
+    r_quick = uuid4()
+    r_complex = uuid4()
+    
+    recipes = [
+        {"id": r_quick, "title": "Hızlı", "ingredients": "su", "category": "A"},
+        {"id": r_complex, "title": "Zor", "ingredients": "a b c d e f g h i j k l m", "category": "A"}
+    ]
+    recommender.fit(recipes)
+    
+    # QUICK mode should favor few ingredients
+    results = recommender.recommend(user_ingredients="su a b c", interactions=[], mode=RecommendationMode.QUICK)
+    assert results[0][0] == r_quick
+
+    # STRICT mode should have high threshold
+    results_strict = recommender.recommend(user_ingredients="su", interactions=[], mode=RecommendationMode.STRICT)
+    # Both might be returned but scores modified
+    
+def test_cold_start_popularity():
+    recommender = RecipeRecommender()
+    r1 = uuid4()
+    r2 = uuid4()
+    recipes = [
+        {"id": r1, "title": "A", "ingredients": "domates", "category": "C"},
+        {"id": r2, "title": "B", "ingredients": "patlıcan", "category": "C"}
+    ]
+    recommender.fit(recipes)
+    recommender.update_popularity(r2, 10)
+    
+    # No user ingredients, no interactions -> Popularity wins
+    results = recommender.recommend(user_ingredients="", interactions=[])
+    assert results[0][0] == r2
+
+def test_filtering_and_padding():
+    recommender = RecipeRecommender()
+    r1 = uuid4()
+    r2 = uuid4()
+    recipes = [
+        {"id": r1, "title": "A", "ingredients": "elma", "category": "Meyve"},
+        {"id": r2, "title": "B", "ingredients": "armut", "category": "Meyve"}
+    ]
+    recommender.fit(recipes)
+    
+    # Filter "elma"
+    results = recommender.recommend(user_ingredients="meyve", interactions=[], excluded_ingredients=["elma"])
+    ids = [r[0] for r in results]
+    assert r1 not in ids
+    assert r2 in ids

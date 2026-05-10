@@ -13,8 +13,8 @@ class RecipeSyncService:
     async def fetch_initial_recipes(self):
         """Backend'den tüm aktif tarifleri toplu olarak çeker."""
         try:
-            # Local development için SSL doğrulamasını devre dışı bırakıyoruz (Self-signed certs)
-            async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
+            # SSL doğrulama ayarını config'den alıyoruz (Development için devre dışı bırakılabilir)
+            async with httpx.AsyncClient(timeout=30.0, verify=settings.VERIFY_SSL) as client:
                 logger.info(f"Tarifler senkronize ediliyor: {settings.BACKEND_SYNC_URL}")
                 response = await client.get(settings.BACKEND_SYNC_URL)
                 

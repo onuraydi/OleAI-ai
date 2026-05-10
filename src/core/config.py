@@ -13,9 +13,10 @@ class Settings(BaseSettings):
     MODEL_MAX_FEATURES: int = 10000
     DECAY_CONSTANT: float = 0.0231 # 30 day half-life
     
-    # Backend Integration
+    # Integration
     BACKEND_URL: str = "https://localhost:7190"
     BACKEND_SYNC_URL: str = f"{BACKEND_URL}/api/recipes/ai-sync"
+    VERIFY_SSL: bool = True
 
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: str = "60"

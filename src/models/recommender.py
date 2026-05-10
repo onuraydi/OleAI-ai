@@ -224,3 +224,5 @@ class RecipeRecommender:
                             continue
                             
                         results.append((rid, 0.1)) # Low score but fills the gap
+            
+            return results[:top_k]

@@ -1,5 +1,4 @@
 import pytest
-from fastapi import Request
 from src.core.exceptions import OleAIException, global_exception_handler
 
 class MockRequest:

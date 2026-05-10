@@ -2,9 +2,9 @@ name: AI Service CI
 
 on:
   push:
-    branches: [ "main"]
+    branches: [ "master"]
   pull_request:
-    branches: [ "main"]
+    branches: [ "master"]
 
 jobs:
   build-and-test:
@@ -32,8 +32,10 @@ jobs:
         ruff check .  # Kod standartlarına (PEP-8) uyumu denetler.
 
     - name: Run tests with Pytest and Coverage
+      env:
+        PYTHONPATH: . # Bu satır src klasörünün bulunmasını sağlar
       run: |
-        pytest --cov=src --cov-report=xml  # Testleri koşturur ve SonarQube için XML formatında kapsam raporu üretir.
+        pytest --cov=src --cov-report=xml
 
     - name: SonarQube Scan
       uses: SonarSource/sonarcloud-github-action@master

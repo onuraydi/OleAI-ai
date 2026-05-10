@@ -6,3 +6,6 @@ numpy
 pytest
 pytest-cov
 ruff
+pydantic-settings
+httpx
+pytest-asyncio

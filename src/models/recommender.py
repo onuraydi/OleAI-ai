@@ -156,7 +156,8 @@ class RecipeRecommender:
                 meta = self.recipe_metadata[recipe_id]
                 
                 # --- HARD FILTERS ---
-                if meta.get("category") in excluded_categories: continue
+                if meta.get("category") in excluded_categories: 
+                    continue
                 if any(exc.lower() in meta["ingredients"].lower() for exc in excluded_ingredients): continue
 
                 final_score = float(score)
@@ -166,8 +167,10 @@ class RecipeRecommender:
                 # 1. QUICK: Malzeme sayısı az olanları öne çıkar
                 if mode == RecommendationMode.QUICK:
                     ingredient_count = len(meta["ingredients"].split(","))
-                    if ingredient_count <= 5: final_score *= 1.3
-                    elif ingredient_count > 10: final_score *= 0.7
+                    if ingredient_count <= 5: 
+                        final_score *= 1.3
+                    elif ingredient_count > 10: 
+                        final_score *= 0.7
 
                 # 2. EXPLORE: Popülerliği az olan veya yeni kategorileri öne çıkar
                 elif mode == RecommendationMode.EXPLORE:
@@ -176,16 +179,20 @@ class RecipeRecommender:
 
                 # 3. STRICT / MINIMAL: Malzeme uyumuna (Cosine Similarity) aşırı yüksek ağırlık ver
                 elif mode in [RecommendationMode.STRICT, RecommendationMode.MINIMAL]:
-                    if final_score < 0.75: final_score *= 0.1 # Malzeme uymuyorsa puanı yerle bir et
-                    else: final_score *= 2.0 # Çok uyuyorsa devasa ödüllendir
+                    if final_score < 0.75: 
+                        final_score *= 0.1 # Malzeme uymuyorsa puanı yerle bir et
+                    else: 
+                        final_score *= 2.0 # Çok uyuyorsa devasa ödüllendir
 
                 # --- GENERIC BOOSTS ---
                 
                 # New Recipe Boost (Last 7 days)
                 created_at = meta.get("created_at")
                 if created_at:
-                    if isinstance(created_at, str): created_at = datetime.fromisoformat(created_at)
-                    if created_at.tzinfo is None: created_at = created_at.replace(tzinfo=timezone.utc)
+                    if isinstance(created_at, str): 
+                        created_at = datetime.fromisoformat(created_at)
+                    if created_at.tzinfo is None: 
+                        created_at = created_at.replace(tzinfo=timezone.utc)
                     days_old = (now - created_at).days
                     if days_old <= 7:
                         final_score *= 1.15 # 15% boost for fresh content
@@ -199,7 +206,8 @@ class RecipeRecommender:
             if len(results) < top_k:
                 popular_ones = sorted(self.popularity_scores.items(), key=lambda x: x[1], reverse=True)
                 for rid, _ in popular_ones:
-                    if len(results) >= top_k: break
+                    if len(results) >= top_k: 
+                        break
                     if rid not in [r[0] for r in results]:
                         results.append((rid, 0.1)) # Low score but fills the gap
 

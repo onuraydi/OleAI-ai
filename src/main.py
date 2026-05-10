@@ -1,24 +1,21 @@
 import sys
-import os
 from pathlib import Path
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Depends
 
 # Proje kök dizinini otomatik olarak Python yoluna ekle
 root_path = str(Path(__file__).parent.parent)
 if root_path not in sys.path:
     sys.path.append(root_path)
 
-import logging
-import uuid
-from contextlib import asynccontextmanager
-from typing import List
-
-from fastapi import FastAPI, HTTPException, status, Depends
-from src.api.schemas import RecommendationRequest, AiRecommendationResponse, RecipeScore, RecipeSyncRequest
-from src.models.recommender import RecipeRecommender
-from src.services.data_preprocessor import DataPreprocessor
-from src.services.recipe_sync_service import RecipeSyncService
-from src.core.security.api_key import get_api_key
-from src.core.config import settings
+# sys.path değişikliğinden sonra projedeki lokallerin yüklenmesi için # noqa: E402 ekliyoruz.
+from src.api.schemas import RecommendationRequest, AiRecommendationResponse, RecipeScore, RecipeSyncRequest  # noqa: E402
+from src.models.recommender import RecipeRecommender  # noqa: E402
+from src.services.data_preprocessor import DataPreprocessor  # noqa: E402
+from src.services.recipe_sync_service import RecipeSyncService  # noqa: E402
+from src.core.security.api_key import get_api_key  # noqa: E402
 
 # Loglama Yapılandırması
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")

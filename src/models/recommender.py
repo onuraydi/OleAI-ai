@@ -137,6 +137,11 @@ class RecipeRecommender:
 
             # 3. Similarity Scores
             if user_vector is not None and not np.all(user_vector == 0 if isinstance(user_vector, np.ndarray) else user_vector.toarray() == 0):
+                
+                # Sckit-learn için np.matrix'i standart array'e çeviriyoruz
+                if isinstance(user_vector, np.matrix):
+                    user_vector = np.asarray(user_vector)
+                    
                 similarity_scores = cosine_similarity(user_vector, self.recipe_matrix).flatten()
             else:
                 # COLD START: Use popularity as base score, but still apply modes!
@@ -210,6 +215,12 @@ class RecipeRecommender:
                     if len(results) >= top_k: 
                         break
                     if rid not in [r[0] for r in results]:
+                        meta = self.recipe_metadata[rid]
+                        
+                        # --- Pad ederken de filtreleri kontrol et ---
+                        if meta.get("category") in excluded_categories: 
+                            continue
+                        if any(exc.lower() in meta["ingredients"].lower() for exc in excluded_ingredients): 
+                            continue
+                            
                         results.append((rid, 0.1)) # Low score but fills the gap
-
-            return results[:top_k]

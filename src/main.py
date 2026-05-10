@@ -1,123 +1,94 @@
+import sys
+import os
+from pathlib import Path
+
+# Proje kök dizinini otomatik olarak Python yoluna ekle
+root_path = str(Path(__file__).parent.parent)
+if root_path not in sys.path:
+    sys.path.append(root_path)
+
 import logging
 import uuid
 from contextlib import asynccontextmanager
 from typing import List
 
-from fastapi import FastAPI, HTTPException, status
-
-from src.api.schemas import RecommendationRequest, RecipeScore
+from fastapi import FastAPI, HTTPException, status, Depends
+from src.api.schemas import RecommendationRequest, AiRecommendationResponse, RecipeScore, RecipeSyncRequest
 from src.models.recommender import RecipeRecommender
 from src.services.data_preprocessor import DataPreprocessor
+from src.services.recipe_sync_service import RecipeSyncService
+from src.core.security.api_key import get_api_key
+from src.core.config import settings
 
-# Senior Standartlarında Loglama Yapılandırması
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger("OleAI-AI-Service")
+# Loglama Yapılandırması
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("OleAI-Main")
 
-# Global Servis Örnekleri (Singleton benzeri kullanım için uygulama ömrü boyunca yaşarlar)
+# Global Servisler
 ai_recommender = RecipeRecommender()
 data_preprocessor = DataPreprocessor()
+sync_service = RecipeSyncService()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Uygulama Yaşam Döngüsü Yönetimi (Lifespan): 
-    Sistem ayağa kalkarken ağır matematiksel modelleri (TF-IDF matrisi vb.) 
-    belleğe yükler ve kapanırken güvenli bir şekilde boşaltır.
-    """
-    logger.info("Yapay Zeka Servisi (OleAI) başlatılıyor...")
+    """Sistem açılışında Backend'den tarifleri çeker ve modeli eğitir."""
+    logger.info("OleAI Öneri Motoru başlatılıyor...")
     
-    try:
-        # TODO: Entegrasyon aşamasında .NET Core API'den gerçek tarif listesi çekilecek.
-        # Şimdilik modelin boş kalmaması için Mock verilerle sistemi ayağa kaldırıyoruz.
-        initial_recipes = [
-            {"id": uuid.uuid4(), "ingredients": "domates biber yumurta zeytinyağı"},
-            {"id": uuid.uuid4(), "ingredients": "kinoa avokado limon nane"},
-            {"id": uuid.uuid4(), "ingredients": "tavuk krema mantar sarımsak"},
-            {"id": uuid.uuid4(), "ingredients": "makarna domates fesleğen sarımsak"}
-        ]
-        
-        # Modeli bir kez eğitip RAM'de kilitliyoruz.
-        ai_recommender.fit(initial_recipes)
-        logger.info(f"Model {len(initial_recipes)} tarif ile başarıyla belleğe yüklendi.")
-        
-    except Exception as e:
-        logger.critical(f"Sistem başlatılırken kritik hata oluştu: {str(e)}")
-        # Başlangıçta hata oluşursa servisi hatalı çalıştırmamak için istisna fırlatıyoruz
-        raise e
-
-    yield  # API bu noktadan sonra istek kabul etmeye başlar.
+    # 1. Backend'den tarifleri çek
+    initial_recipes = await sync_service.fetch_initial_recipes()
     
-    logger.info("Yapay Zeka Servisi kapatılıyor. Kaynaklar serbest bırakıldı.")
+    if not initial_recipes:
+        logger.warning("Backend'den tarif alınamadı, boş modelle başlatılıyor.")
+        initial_recipes = [] # Boş liste ile başlat, sync endpoint'i ile eklenebilir.
 
-# FastAPI Uygulama Tanımı
-app = FastAPI(
-    title="OleAI Recommendation Engine",
-    description="Yapay Zekâ Destekli, Zaman Sönümlemeli Dinamik Öneri API",
-    version="1.0.0",
-    lifespan=lifespan
-)
+    # 2. Modeli eğit
+    ai_recommender.fit(initial_recipes)
+    logger.info(f"Sistem {len(initial_recipes)} tarif ile hazır.")
+    
+    yield
+    logger.info("Sistem kapatılıyor.")
 
-@app.post(
-    "/api/v1/recommendations",
-    response_model=List[RecipeScore],
-    status_code=status.HTTP_200_OK,
-    summary="Kişiselleştirilmiş Tarif Önerileri Üret",
-    response_description="Kullanıcı profili ve dolap verisine göre puanlanmış tarif ID listesi."
-)
+app = FastAPI(title="OleAI Engine", lifespan=lifespan)
+
+@app.post("/api/v1/recommendations", response_model=AiRecommendationResponse, dependencies=[Depends(get_api_key)])
 async def get_recommendations(request: RecommendationRequest):
-    """
-    .NET Core Backend'den gelen verileri alır:
-    1. Malzemeleri NLP (DataPreprocessor) ile temizler.
-    2. Zaman Sönümlemeli (Time Decay) algoritmayı kullanarak dinamik profil oluşturur.
-    3. Bellekteki (In-Memory) vektör uzayında Kosinüs Benzerliği ile en yakın tarifleri bulur.
-    """
-    logger.info(f"Öneri Talebi: Kullanıcı={request.user_id}, Malzeme_Sayısı={len(request.pantry_items)}")
-    
+    """Kullanıcıya özel hibrit öneriler döner."""
     try:
-        # Sınır Durum Kontrolü: Malzeme yoksa işlem yapmaya gerek yok (Performance Optimization)
-        if not request.pantry_items:
-            logger.warning(f"Kullanıcı {request.user_id} için boş dolap verisi gönderildi.")
-            return []
-
-        # 1. Aşama: Malzeme İsimlerini Çıkar ve NLP Temizliği Uygula
-        raw_pantry_list = [item.name for item in request.pantry_items]
-        cleaned_pantry_text = data_preprocessor.process_pantry_items(raw_pantry_list)
+        # Malzemeleri temizle
+        pantry_names = [p.name for p in request.pantry_items] if request.pantry_items else []
+        pantry_text = data_preprocessor.process_pantry_items(pantry_names)
         
-        if not cleaned_pantry_text:
-            return []
-
-        # 2. Aşama: Öneri Motorunu Çalıştır (Dinamik Profilleme ve Vektör Hesabı)
-        # top_k parametresi jüri sunumunda veya testlerde ihtiyaca göre artırılabilir
-        recommended_results = ai_recommender.recommend(
-            user_ingredients=cleaned_pantry_text,
+        # Önerileri hesapla
+        raw_results = ai_recommender.recommend(
+            user_ingredients=pantry_text,
             interactions=request.interactions,
-            top_k=10
+            excluded_ingredients=request.excluded_ingredients,
+            excluded_categories=request.excluded_categories,
+            mode=request.mode
         )
-
-        # 3. Aşama: Ham sonuçları (UUID, Score) Pydantic modeline dönüştür
-        response_payload = [
-            RecipeScore(recipeId=recipe_id, score=round(score, 4))
-            for recipe_id, score in recommended_results
-        ]
-
-        logger.info(f"Kullanıcı {request.user_id} için {len(response_payload)} adet başarılı öneri döndürüldü.")
-        return response_payload
-
-    except ValueError as ve:
-        logger.error(f"Veri doğrulama hatası: {str(ve)}")
-        raise HTTPException(status_code=400, detail="Gönderilen verilerde tutarsızlık tespit edildi.")
         
+        scores = [RecipeScore(recipeId=res[0], score=res[1]) for res in raw_results]
+        return AiRecommendationResponse(recipes=scores)
     except Exception as e:
-        logger.error(f"Öneri üretilirken beklenmeyen hata: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Öneri motoru şu an talebinize yanıt veremiyor."
-        )
+        logger.error(f"Öneri hatası: {str(e)}")
+        raise HTTPException(status_code=500, detail="Öneri oluşturulamadı.")
 
-# Health Check Uç Noktası (Deployment ve Docker Monitoring için şarttır)
-@app.get("/health", status_code=status.HTTP_200_OK, tags=["Monitoring"])
+@app.post("/api/v1/recipes/sync", dependencies=[Depends(get_api_key)])
+async def sync_recipe(request: RecipeSyncRequest):
+    """Yeni bir tarif eklendiğinde modeli anlık günceller."""
+    try:
+        clean_ingredients = data_preprocessor.clean_text(request.ingredients)
+        recipe_data = {
+            "id": request.recipe_id,
+            "title": request.title,
+            "ingredients": clean_ingredients,
+            "category": request.category
+        }
+        ai_recommender.add_recipe(recipe_data)
+        return {"status": "success", "message": f"Recipe {request.recipe_id} synced."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/health")
 async def health_check():
     return {"status": "healthy", "model_loaded": ai_recommender.recipe_matrix is not None}

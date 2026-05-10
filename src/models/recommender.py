@@ -61,19 +61,26 @@ class RecipeRecommender:
     def add_recipe(self, recipe: Dict):
         """Incremental update: Adds a new recipe without full retraining."""
         with self._lock:
-            if self.recipe_matrix is None:
-                self.fit([recipe])
-                return
+            try:
+                if self.recipe_matrix is None:
+                    logger.info(f"Model not initialized. Training with first recipe: {recipe['id']}")
+                    self.fit([recipe])
+                    return
 
-            new_vec = self.vectorizer.transform([recipe["ingredients"]])
-            self.recipe_ids.append(recipe["id"])
-            self.recipe_metadata[recipe["id"]] = recipe
-            if recipe["id"] not in self.popularity_scores:
-                self.popularity_scores[recipe["id"]] = 0
-            
-            from scipy.sparse import vstack
-            self.recipe_matrix = vstack([self.recipe_matrix, new_vec])
-            logger.debug(f"Recipe {recipe['id']} added incrementally.")
+                new_vec = self.vectorizer.transform([recipe["ingredients"]])
+                self.recipe_ids.append(recipe["id"])
+                self.recipe_metadata[recipe["id"]] = recipe
+                if recipe["id"] not in self.popularity_scores:
+                    self.popularity_scores[recipe["id"]] = 0
+                
+                from scipy.sparse import vstack
+                self.recipe_matrix = vstack([self.recipe_matrix, new_vec])
+                logger.debug(f"Recipe {recipe['id']} added incrementally.")
+            except Exception as e:
+                logger.error(f"Error adding recipe {recipe.get('id')}: {str(e)}")
+                # If it's a vocabulary error, we might need a full fit
+                if "vocabulary" in str(e).lower():
+                    self.fit([recipe])
 
     def _get_recipe_vector(self, recipe_id: UUID):
         try:
@@ -89,7 +96,7 @@ class RecipeRecommender:
         excluded_ingredients: List[str] = [],
         excluded_categories: List[str] = [],
         mode: RecommendationMode = RecommendationMode.DEFAULT,
-        top_k: int = 10
+        top_k: int = 50
     ) -> List[Tuple[UUID, float]]:
         
         with self._lock:
@@ -128,15 +135,17 @@ class RecipeRecommender:
                         user_vector += (recipe_vec * weight * sign * interaction_impact)
                         self.update_popularity(interaction.recipe_id, 1)
 
-            # --- COLD START HANDLING ---
-            # If user has NO history and NO pantry, return popular recipes
-            if user_vector is None or np.all(user_vector == 0 if isinstance(user_vector, np.ndarray) else user_vector.toarray() == 0):
-                logger.info("Cold start detected for user. Returning popular items.")
-                popular_ids = sorted(self.popularity_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
-                return [(rid, 0.5 + (0.01 * score)) for rid, score in popular_ids]
-
             # 3. Similarity Scores
-            similarity_scores = cosine_similarity(user_vector, self.recipe_matrix).flatten()
+            if user_vector is not None and not np.all(user_vector == 0 if isinstance(user_vector, np.ndarray) else user_vector.toarray() == 0):
+                similarity_scores = cosine_similarity(user_vector, self.recipe_matrix).flatten()
+            else:
+                # COLD START: Use popularity as base score, but still apply modes!
+                logger.info("Cold start or empty user vector. Using popularity as baseline.")
+                max_pop = max(self.popularity_scores.values()) if self.popularity_scores else 1
+                similarity_scores = np.array([
+                    (self.popularity_scores.get(rid, 0) / (max_pop + 1)) * 0.1 
+                    for rid in self.recipe_ids
+                ])
 
             # 4. Filter and Boost
             results = []
@@ -146,10 +155,31 @@ class RecipeRecommender:
                 recipe_id = self.recipe_ids[idx]
                 meta = self.recipe_metadata[recipe_id]
                 
+                # --- HARD FILTERS ---
                 if meta.get("category") in excluded_categories: continue
                 if any(exc.lower() in meta["ingredients"].lower() for exc in excluded_ingredients): continue
 
                 final_score = float(score)
+                
+                # --- MODE SPECIFIC LOGIC ---
+                
+                # 1. QUICK: Malzeme sayısı az olanları öne çıkar
+                if mode == RecommendationMode.QUICK:
+                    ingredient_count = len(meta["ingredients"].split(","))
+                    if ingredient_count <= 5: final_score *= 1.3
+                    elif ingredient_count > 10: final_score *= 0.7
+
+                # 2. EXPLORE: Popülerliği az olan veya yeni kategorileri öne çıkar
+                elif mode == RecommendationMode.EXPLORE:
+                    popularity = self.popularity_scores.get(recipe_id, 0)
+                    final_score *= (1.0 / (1.0 + math.log1p(popularity))) # Az bilinenleri öne çıkar
+
+                # 3. STRICT / MINIMAL: Malzeme uyumuna (Cosine Similarity) aşırı yüksek ağırlık ver
+                elif mode in [RecommendationMode.STRICT, RecommendationMode.MINIMAL]:
+                    if final_score < 0.75: final_score *= 0.1 # Malzeme uymuyorsa puanı yerle bir et
+                    else: final_score *= 2.0 # Çok uyuyorsa devasa ödüllendir
+
+                # --- GENERIC BOOSTS ---
                 
                 # New Recipe Boost (Last 7 days)
                 created_at = meta.get("created_at")
@@ -158,7 +188,7 @@ class RecipeRecommender:
                     if created_at.tzinfo is None: created_at = created_at.replace(tzinfo=timezone.utc)
                     days_old = (now - created_at).days
                     if days_old <= 7:
-                        final_score *= 1.2 # 20% boost for fresh content
+                        final_score *= 1.15 # 15% boost for fresh content
 
                 if final_score > 0.01:
                     results.append((recipe_id, final_score))

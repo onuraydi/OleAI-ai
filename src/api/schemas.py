@@ -4,46 +4,56 @@ from uuid import UUID
 from datetime import datetime
 from enum import Enum
 
-# Etkileşim türleri (Beğendi / Beğenmedi)
 class InteractionType(str, Enum):
     LIKE = "like"
     DISLIKE = "dislike"
 
 class RecommendationMode(str, Enum):
-    QUICK = "quick"              # Fast recipes
-    EXPLORE = "explore"          # New types of recipes
-    HEALTHY = "healthy"          # Low cal/healthy ingredients
-    MINIMAL_SHOPPING = "minimal" # Maximize pantry use
-    FOR_YOU = "for_you"          # Focus on user taste/history
-    ULTIMATE = "ultimate"        # Full combination of pantry + interactions
-    DEFAULT = "default"          # Balanced
+    DEFAULT = "default"
+    ULTIMATE = "ultimate"
+    STRICT = "strict"
+    FOR_YOU = "foryou"
+    QUICK = "quick"
+    EXPLORE = "explore"
+    MINIMAL = "minimalshopping"
 
 class PantryItem(BaseModel): 
-    id: UUID = Field(..., description="Malzemenin sistemdeki benzersiz kimliği")
-    name: str = Field(..., min_length=2, description="Malzemenin sistemdeki adı (örn: domates)")
+    id: UUID
+    name: str
 
 class RecipeInteraction(BaseModel):
-    recipe_id: UUID = Field(..., alias="recipeId", description="Etkileşime girilen tarifin ID'si")
-    interaction_type: InteractionType = Field(..., alias="type", description="Etkileşim türü (like/dislike)")
-    interaction_date: datetime = Field(..., alias="date", description="Etkileşimin gerçekleştiği tarih")
+    recipe_id: UUID = Field(..., alias="recipeId")
+    interaction_type: str = Field(..., alias="type")
+    interaction_date: datetime = Field(..., alias="date")
 
     class Config:
         populate_by_name = True
 
 class RecommendationRequest(BaseModel):
-    user_id: UUID = Field(..., alias="id", description="Kullanıcının benzersiz kimliği") 
-    preferences: List[str] = Field(default_factory=list, description="Diyet kısıtları (örn: vegan, glutensiz)")
-    pantry_items: List[PantryItem] = Field(..., alias="pantryItems", description="Dolaptaki malzemeler")
-    
-    # YENİ EKLENEN: Kullanıcının geçmiş etkileşimleri (Opsiyonel, yeni kullanıcıda boş gelebilir)
-    interactions: List[RecipeInteraction] = Field(default_factory=list, alias="interactions", description="Kullanıcının geçmiş etkileşimleri")
+    user_id: UUID = Field(..., alias="id")
+    pantry_items: List[PantryItem] = Field(default_factory=list, alias="pantryItems")
+    interactions: List[RecipeInteraction] = Field(default_factory=list)
+    preferences: List[str] = Field(default_factory=list)
+    excluded_ingredients: List[str] = Field(default_factory=list, alias="excludedIngredients")
+    excluded_categories: List[str] = Field(default_factory=list, alias="excludedCategories")
+    mode: RecommendationMode = Field(default=RecommendationMode.DEFAULT)
 
     class Config:
         populate_by_name = True
 
 class RecipeScore(BaseModel):
-    recipe_id: UUID = Field(..., alias="recipeId", description="Önerilen tarifin kimliği (GUID)")
-    score: float = Field(..., ge=0.0, le=1.0, description="0 ile 1 arasındaki benzerlik/uygunluk skoru")
+    recipe_id: UUID = Field(..., alias="recipeId")
+    score: float
 
     class Config:
         populate_by_name = True
+
+class AiRecommendationResponse(BaseModel):
+    recipes: List[RecipeScore] = Field(default_factory=list)
+
+class RecipeSyncRequest(BaseModel):
+    recipe_id: UUID = Field(..., alias="recipeId")
+    title: str
+    ingredients: str
+    category: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)

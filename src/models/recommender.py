@@ -158,7 +158,8 @@ class RecipeRecommender:
                 # --- HARD FILTERS ---
                 if meta.get("category") in excluded_categories: 
                     continue
-                if any(exc.lower() in meta["ingredients"].lower() for exc in excluded_ingredients): continue
+                if any(exc.lower() in meta["ingredients"].lower() for exc in excluded_ingredients): 
+                    continue
 
                 final_score = float(score)
                 

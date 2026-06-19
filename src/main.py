@@ -47,21 +47,28 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="OleAI Engine", lifespan=lifespan)
 
+from src.core.exceptions import global_exception_handler, OleAIException
+app.add_exception_handler(OleAIException, global_exception_handler)
+app.add_exception_handler(Exception, global_exception_handler)
+
 @app.post("/api/v1/recommendations", response_model=AiRecommendationResponse, dependencies=[Depends(get_api_key)])
 async def get_recommendations(request: RecommendationRequest):
     """Kullanıcıya özel hibrit öneriler döner."""
     try:
-        # Malzemeleri temizle
+        # Malzemeleri temizle (NLP motoru için metne çeviriyoruz, ayrıca yapısal olanları da iletiyoruz)
         pantry_names = [p.name for p in request.pantry_items] if request.pantry_items else []
         pantry_text = data_preprocessor.process_pantry_items(pantry_names)
         
         # Önerileri hesapla
         raw_results = ai_recommender.recommend(
             user_ingredients=pantry_text,
+            structured_pantry=request.pantry_items,
             interactions=request.interactions,
             excluded_ingredients=request.excluded_ingredients,
             excluded_categories=request.excluded_categories,
-            mode=request.mode
+            staple_ingredient_ids=[str(s) for s in request.staple_ingredient_ids] if getattr(request, "staple_ingredient_ids", None) else [],
+            mode=request.mode,
+            use_zero_waste=request.use_zero_waste
         )
         
         scores = [RecipeScore(recipeId=res[0], score=res[1]) for res in raw_results]
@@ -74,12 +81,18 @@ async def get_recommendations(request: RecommendationRequest):
 async def sync_recipe(request: RecipeSyncRequest):
     """Yeni bir tarif eklendiğinde modeli anlık günceller."""
     try:
-        clean_ingredients = data_preprocessor.clean_text(request.ingredients)
+        # NLP motoru için isimleri birleştirip temizle
+        ingredient_names = " ".join([i.name for i in request.ingredients])
+        clean_ingredients = data_preprocessor.clean_text(ingredient_names)
+        
         recipe_data = {
             "id": request.recipe_id,
             "title": request.title,
-            "ingredients": clean_ingredients,
-            "category": request.category
+            "ingredientsText": clean_ingredients,
+            "ingredients": [i.model_dump() for i in request.ingredients],
+            "category": request.category,
+            "isPublished": request.is_published,
+            "popularity": request.popularity
         }
         ai_recommender.add_recipe(recipe_data)
         return {"status": "success", "message": f"Recipe {request.recipe_id} synced."}

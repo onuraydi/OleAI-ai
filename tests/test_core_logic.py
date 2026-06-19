@@ -19,31 +19,32 @@ def test_recommender_basic_logic():
     
     # Mock recipes
     recipes = [
-        {"id": uuid4(), "title": "Domates Çorbası", "ingredients": "domates su tuz", "category": "Çorba"},
-        {"id": uuid4(), "title": "Izgara Tavuk", "ingredients": "tavuk kekik yağ", "category": "Ana Yemek"},
-        {"id": uuid4(), "title": "Menemen", "ingredients": "domates biber yumurta", "category": "Kahvaltı"}
+        {"id": uuid4(), "title": "Domates Çorbası", "ingredients": [{"name": "domates", "amount": 1}, {"name": "su", "amount": 1}, {"name": "tuz", "amount": 1}], "category": "Çorba"},
+        {"id": uuid4(), "title": "Izgara Tavuk", "ingredients": [{"name": "tavuk", "amount": 1}, {"name": "kekik", "amount": 1}, {"name": "yağ", "amount": 1}], "category": "Ana Yemek"},
+        {"id": uuid4(), "title": "Menemen", "ingredients": [{"name": "domates", "amount": 1}, {"name": "biber", "amount": 1}, {"name": "yumurta", "amount": 1}], "category": "Kahvaltı"}
     ]
     
     recommender.fit(recipes)
     
     # Test recommendation for someone with "domates"
-    results = recommender.recommend(user_ingredients="domates", interactions=[])
+    results = recommender.recommend(user_ingredients="domates", structured_pantry=[], interactions=[])
     
     assert len(results) > 0
     # Domates Çorbası or Menemen should be top
-    assert "domates" in recommender.recipe_metadata[results[0][0]]["ingredients"]
+    assert any(ing.get("name") == "domates" for ing in recommender.recipe_metadata[results[0][0]]["ingredients"])
 
 def test_hard_filtering():
     recommender = RecipeRecommender()
     recipe_id = uuid4()
     recipes = [
-        {"id": recipe_id, "title": "Fıstıklı Baklava", "ingredients": "fıstık un şeker", "category": "Tatlı"}
+        {"id": recipe_id, "title": "Fıstıklı Baklava", "ingredients": [{"name": "fıstık", "amount": 1}, {"name": "un", "amount": 1}, {"name": "şeker", "amount": 1}], "category": "Tatlı"}
     ]
     recommender.fit(recipes)
     
     # Recommend with "fıstık" excluded
     results = recommender.recommend(
         user_ingredients="un", 
+        structured_pantry=[],
         interactions=[], 
         excluded_ingredients=["fıstık"]
     )
@@ -58,8 +59,8 @@ def test_for_you_mode_logic():
     recipe_other = uuid4()
     
     recipes = [
-        {"id": recipe_like, "title": "Pizza", "ingredients": "hamur peynir sucuk", "category": "Fast Food"},
-        {"id": recipe_other, "title": "Salata", "ingredients": "marul domates salatalık", "category": "Diyet"}
+        {"id": recipe_like, "title": "Pizza", "ingredients": [{"name": "hamur", "amount": 1}, {"name": "peynir", "amount": 1}, {"name": "sucuk", "amount": 1}], "category": "Fast Food"},
+        {"id": recipe_other, "title": "Salata", "ingredients": [{"name": "marul", "amount": 1}, {"name": "domates", "amount": 1}, {"name": "salatalık", "amount": 1}], "category": "Diyet"}
     ]
     recommender.fit(recipes)
     
@@ -74,6 +75,7 @@ def test_for_you_mode_logic():
     
     results = recommender.recommend(
         user_ingredients="", 
+        structured_pantry=[],
         interactions=interactions,
         mode=RecommendationMode.FOR_YOU
     )
@@ -83,13 +85,13 @@ def test_for_you_mode_logic():
 
 def test_incremental_add():
     recommender = RecipeRecommender()
-    recipe1 = {"id": uuid4(), "title": "A", "ingredients": "su", "category": "C"}
+    recipe1 = {"id": uuid4(), "title": "A", "ingredients": [{"name": "su", "amount": 1}], "category": "C"}
     recommender.add_recipe(recipe1)
     
     assert len(recommender.recipe_ids) == 1
     assert recommender.recipe_matrix is not None
     
-    recipe2 = {"id": uuid4(), "title": "B", "ingredients": "tuz", "category": "C"}
+    recipe2 = {"id": uuid4(), "title": "B", "ingredients": [{"name": "tuz", "amount": 1}], "category": "C"}
     recommender.add_recipe(recipe2)
     assert len(recommender.recipe_ids) == 2
     assert recommender.recipe_matrix.shape[0] == 2
@@ -102,17 +104,17 @@ def test_recommendation_modes():
     r_complex = uuid4()
     
     recipes = [
-        {"id": r_quick, "title": "Hızlı", "ingredients": "su", "category": "A"},
-        {"id": r_complex, "title": "Zor", "ingredients": "a b c d e f g h i j k l m", "category": "A"}
+        {"id": r_quick, "title": "Hızlı", "ingredients": [{"name": "su", "amount": 1}], "category": "A"},
+        {"id": r_complex, "title": "Zor", "ingredients": [{"name": "a", "amount": 1}, {"name": "b", "amount": 1}, {"name": "c", "amount": 1}, {"name": "d", "amount": 1}, {"name": "e", "amount": 1}, {"name": "f", "amount": 1}, {"name": "g", "amount": 1}, {"name": "h", "amount": 1}, {"name": "i", "amount": 1}, {"name": "j", "amount": 1}, {"name": "k", "amount": 1}, {"name": "l", "amount": 1}, {"name": "m", "amount": 1}], "category": "A"}
     ]
     recommender.fit(recipes)
     
     # QUICK mode should favor few ingredients
-    results = recommender.recommend(user_ingredients="su a b c", interactions=[], mode=RecommendationMode.QUICK)
+    results = recommender.recommend(user_ingredients="su a b c", structured_pantry=[], interactions=[], mode=RecommendationMode.QUICK)
     assert results[0][0] == r_quick
 
     # STRICT mode should have high threshold
-    results_strict = recommender.recommend(user_ingredients="su", interactions=[], mode=RecommendationMode.STRICT)
+    results_strict = recommender.recommend(user_ingredients="su", structured_pantry=[], interactions=[], mode=RecommendationMode.STRICT)
     # Both might be returned but scores modified
     assert len(results_strict) >= 0
     
@@ -121,14 +123,14 @@ def test_cold_start_popularity():
     r1 = uuid4()
     r2 = uuid4()
     recipes = [
-        {"id": r1, "title": "A", "ingredients": "domates", "category": "C"},
-        {"id": r2, "title": "B", "ingredients": "patlıcan", "category": "C"}
+        {"id": r1, "title": "A", "ingredients": [{"name": "domates", "amount": 1}], "category": "C"},
+        {"id": r2, "title": "B", "ingredients": [{"name": "patlıcan", "amount": 1}], "category": "C"}
     ]
     recommender.fit(recipes)
     recommender.update_popularity(r2, 10)
     
     # No user ingredients, no interactions -> Popularity wins
-    results = recommender.recommend(user_ingredients="", interactions=[])
+    results = recommender.recommend(user_ingredients="", structured_pantry=[], interactions=[])
     assert results[0][0] == r2
 
 def test_filtering_and_padding():
@@ -136,13 +138,13 @@ def test_filtering_and_padding():
     r1 = uuid4()
     r2 = uuid4()
     recipes = [
-        {"id": r1, "title": "A", "ingredients": "elma", "category": "Meyve"},
-        {"id": r2, "title": "B", "ingredients": "armut", "category": "Meyve"}
+        {"id": r1, "title": "A", "ingredients": [{"name": "elma", "amount": 1}], "category": "Meyve"},
+        {"id": r2, "title": "B", "ingredients": [{"name": "armut", "amount": 1}], "category": "Meyve"}
     ]
     recommender.fit(recipes)
     
     # Filter "elma"
-    results = recommender.recommend(user_ingredients="meyve", interactions=[], excluded_ingredients=["elma"])
+    results = recommender.recommend(user_ingredients="meyve", structured_pantry=[], interactions=[], excluded_ingredients=["elma"])
     ids = [r[0] for r in results]
     assert r1 not in ids
     assert r2 in ids

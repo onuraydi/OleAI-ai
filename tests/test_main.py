@@ -22,9 +22,9 @@ def test_recommendations_authorized_empty_payload():
 def test_sync_recipe_authorized():
     headers = {"X-API-Key": settings.AI_SERVICE_API_KEY}
     payload = {
-        "recipe_id": "00000000-0000-0000-0000-000000000001",
+        "recipeId": "00000000-0000-0000-0000-000000000001",
         "title": "New Recipe",
-        "ingredients": "test ingredients",
+        "ingredients": [{"id": "550e8400-e29b-41d4-a716-446655440001", "name": "Test Ingredient", "amount": 1.0, "unit": "Adet", "aliases": []}],
         "category": "Test"
     }
     response = client.post("/api/v1/recipes/sync", json=payload, headers=headers)

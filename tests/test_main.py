@@ -30,3 +30,17 @@ def test_sync_recipe_authorized():
     response = client.post("/api/v1/recipes/sync", json=payload, headers=headers)
     assert response.status_code == 200
     assert response.json()["status"] == "success"
+
+def test_lifespan_and_recommend():
+    headers = {"X-API-Key": settings.AI_SERVICE_API_KEY}
+    payload = {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "pantryItems": [{"id": "00000000-0000-0000-0000-000000000001", "name": "Tomato", "quantity": 2.0, "unit": "kg"}],
+        "interactions": [],
+        "mode": "default",
+        "useZeroWaste": False
+    }
+    with TestClient(app) as client:
+        response = client.post("/api/v1/recommendations", json=payload, headers=headers)
+        assert response.status_code == 200
+        assert "recipes" in response.json()

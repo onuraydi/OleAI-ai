@@ -16,6 +16,7 @@ from src.models.recommender import RecipeRecommender  # noqa: E402
 from src.services.data_preprocessor import DataPreprocessor  # noqa: E402
 from src.services.recipe_sync_service import RecipeSyncService  # noqa: E402
 from src.core.security.api_key import get_api_key  # noqa: E402
+from src.core.exceptions import global_exception_handler, OleAIException  # noqa: E402
 
 # Loglama Yapılandırması
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -47,7 +48,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="OleAI Engine", lifespan=lifespan)
 
-from src.core.exceptions import global_exception_handler, OleAIException
 app.add_exception_handler(OleAIException, global_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
 
@@ -73,8 +73,8 @@ async def get_recommendations(request: RecommendationRequest):
         
         scores = [RecipeScore(recipeId=res[0], score=res[1]) for res in raw_results]
         return AiRecommendationResponse(recipes=scores)
-    except Exception as e:
-        logger.error(f"Öneri hatası: {str(e)}")
+    except Exception:
+        logger.exception("Öneri hatası")
         raise HTTPException(status_code=500, detail="Öneri oluşturulamadı.")
 
 @app.post("/api/v1/recipes/sync", dependencies=[Depends(get_api_key)])

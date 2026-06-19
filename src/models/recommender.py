@@ -163,10 +163,14 @@ class RecipeRecommender:
                     
                     # Convert to base units for comparison
                     def get_base(amt, u):
-                        if u in ["kg", "kilogram", "kilograms"]: return amt * 1000.0, "g"
-                        if u in ["g", "gram", "grams"]: return amt, "g"
-                        if u in ["l", "liter", "litre", "liters"]: return amt * 1000.0, "ml"
-                        if u in ["ml", "milliliter", "milliliters"]: return amt, "ml"
+                        if u in ["kg", "kilogram", "kilograms"]:
+                            return amt * 1000.0, "g"
+                        if u in ["g", "gram", "grams"]:
+                            return amt, "g"
+                        if u in ["l", "liter", "litre", "liters"]:
+                            return amt * 1000.0, "ml"
+                        if u in ["ml", "milliliter", "milliliters"]:
+                            return amt, "ml"
                         return amt, u
                         
                     req_base_amt, req_base_u = get_base(req_amount, req_unit)

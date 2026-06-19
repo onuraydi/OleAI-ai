@@ -87,3 +87,75 @@ def test_recommender_basic_flow():
         mode=RecommendationMode.EXPLORE
     )
     assert len(empty_results) > 0
+
+def test_recommender_edge_cases():
+    recommender = RecipeRecommender()
+    
+    # 1. Fit empty
+    recommender.fit([]) # Covers line 34
+    assert len(recommender.recipe_ids) == 0
+    
+    # 2. Fit unpublished and string ingredients
+    r1_id = str(uuid4())
+    r2_id = str(uuid4())
+    recipes = [
+        {
+            "id": r1_id,
+            "title": "Unpublished",
+            "isPublished": False,
+            "ingredients": [{"name": "test"}]
+        },
+        {
+            "id": r2_id,
+            "title": "String Ing",
+            "isPublished": True,
+            "ingredients": "domates biber" # string instead of list
+        }
+    ]
+    recommender.fit(recipes)
+    assert len(recommender.recipe_ids) == 1 # Only r2_id
+    
+    # 3. Add existing recipe (Update)
+    recommender.add_recipe({
+        "id": r2_id,
+        "title": "String Ing Updated",
+        "isPublished": True,
+        "ingredients": "domates biber soğan"
+    })
+    
+    # 4. Add unpublished recipe
+    recommender.add_recipe({
+        "id": str(uuid4()),
+        "isPublished": False
+    })
+    
+    # 5. Recommendation edge cases
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    exp_date = now + timedelta(days=2) # Expires soon
+    
+    pantry = [
+        PantryItem(id="00000000-0000-0000-0000-000000000010", name="Milk", quantity=1.0, unit="l", expirationDate=exp_date),
+        PantryItem(id="00000000-0000-0000-0000-000000000011", name="Water", quantity=0.0, unit="ml") # zero amount
+    ]
+    
+    # 6. Different interactions
+    interactions = [
+        RecipeInteraction(recipeId=r2_id, type="save", date=now),
+        RecipeInteraction(recipeId=r2_id, type="dislike", date=now)
+    ]
+    
+    # 7. Test modes
+    for mode in [RecommendationMode.ULTIMATE, RecommendationMode.FOR_YOU, RecommendationMode.QUICK, RecommendationMode.MINIMAL]:
+        results = recommender.recommend(
+            user_ingredients="domates",
+            structured_pantry=pantry,
+            interactions=interactions,
+            mode=mode,
+            staple_ingredient_ids=["00000000-0000-0000-0000-000000000011"]
+        )
+        assert isinstance(results, list)
+    
+    # Recommend when matrix is None
+    empty_recommender = RecipeRecommender()
+    assert len(empty_recommender.recommend("", [], [])) == 0

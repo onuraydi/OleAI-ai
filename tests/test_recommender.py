@@ -1,4 +1,3 @@
-import pytest
 from uuid import uuid4
 from src.models.recommender import RecipeRecommender
 from src.api.schemas import PantryItem, RecipeInteraction, RecommendationMode

@@ -9,3 +9,4 @@ ruff
 pydantic-settings
 httpx
 pytest-asyncio
+scipy

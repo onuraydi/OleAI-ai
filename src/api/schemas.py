@@ -7,6 +7,7 @@ from enum import Enum
 class InteractionType(str, Enum):
     LIKE = "like"
     DISLIKE = "dislike"
+    SAVE = "save"
 
 class RecommendationMode(str, Enum):
     DEFAULT = "default"
@@ -20,6 +21,11 @@ class RecommendationMode(str, Enum):
 class PantryItem(BaseModel): 
     id: UUID
     name: str
+    quantity: float
+    unit: str
+    expiration_date: Optional[datetime] = Field(default=None, alias="expirationDate")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 class RecipeInteraction(BaseModel):
     recipe_id: UUID = Field(..., alias="recipeId")
@@ -36,6 +42,8 @@ class RecommendationRequest(BaseModel):
     excluded_ingredients: List[str] = Field(default_factory=list, alias="excludedIngredients")
     excluded_categories: List[str] = Field(default_factory=list, alias="excludedCategories")
     mode: RecommendationMode = Field(default=RecommendationMode.DEFAULT)
+    use_zero_waste: bool = Field(default=False, alias="useZeroWaste")
+    staple_ingredient_ids: List[str] = Field(default_factory=list, alias="stapleIngredientIds")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -48,11 +56,20 @@ class RecipeScore(BaseModel):
 class AiRecommendationResponse(BaseModel):
     recipes: List[RecipeScore] = Field(default_factory=list)
 
+class RecipeIngredientSchema(BaseModel):
+    id: UUID
+    name: str
+    amount: float
+    unit: str
+    aliases: List[str] = Field(default_factory=list)
+
 class RecipeSyncRequest(BaseModel):
     recipe_id: UUID = Field(..., alias="recipeId")
     title: str
-    ingredients: str
+    ingredients: List[RecipeIngredientSchema]
     category: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
+    is_published: bool = Field(default=True, alias="isPublished")
+    popularity: int = Field(default=0)
 
     model_config = ConfigDict(populate_by_name=True)

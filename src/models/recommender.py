@@ -117,6 +117,44 @@ class RecipeRecommender:
         except ValueError:
             return None
             
+    @staticmethod
+    def _get_base_unit(amt: float, u: str) -> Tuple[float, str]:
+        if u in ["kg", "kilogram", "kilograms"]:
+            return amt * 1000.0, "g"
+        if u in ["g", "gram", "grams"]:
+            return amt, "g"
+        if u in ["l", "liter", "litre", "liters"]:
+            return amt * 1000.0, "ml"
+        if u in ["ml", "milliliter", "milliliters"]:
+            return amt, "ml"
+        return amt, u
+
+    @staticmethod
+    def _find_pantry_match(req_id: str, req_name: str, aliases: List[str], pantry_dict: Dict[str, Dict]) -> Optional[Dict]:
+        for p_data in pantry_dict.values():
+            if str(p_data.get("id", "")).lower() == req_id:
+                return p_data
+        for p_name, p_data in pantry_dict.items():
+            if p_name == req_name or p_name in aliases:
+                return p_data
+        return None
+
+    @classmethod
+    def _calculate_ingredient_ratio(cls, req: Dict, match: Dict) -> float:
+        req_amount = float(req.get("amount", 0.0))
+        if req_amount <= 0:
+            return 1.0
+            
+        req_unit = str(req.get("unit") or "").lower().strip()
+        p_unit = str(match.get("unit") or "").lower().strip()
+        
+        req_base_amt, req_base_u = cls._get_base_unit(req_amount, req_unit)
+        p_base_amt, p_base_u = cls._get_base_unit(float(match.get("amount", 0)), p_unit)
+        
+        if req_base_u == p_base_u and req_base_amt > 0:
+            return min(1.0, p_base_amt / req_base_amt)
+        return min(1.0, float(match.get("amount", 0)) / req_amount)
+
     def _calculate_fulfillment(self, recipe_id: UUID, pantry_dict: Dict[str, Dict], staple_ids: Optional[set] = None) -> float:
         '''
         Calculates the structured fulfillment ratio.
@@ -137,53 +175,11 @@ class RecipeRecommender:
                 continue
                 
             req_name = req.get("name", "").lower()
-            req_amount = float(req.get("amount", 0.0))
             aliases = [a.lower() for a in req.get("aliases", [])]
             
-            # Find match in pantry
-            match = None
-            
-            # 1. By exact ID
-            for p_name, p_data in pantry_dict.items():
-                if str(p_data["id"]).lower() == req_id:
-                    match = p_data
-                    break
-            
-            # 2. By Name or Alias
-            if not match:
-                for p_name, p_data in pantry_dict.items():
-                    if p_name == req_name or p_name in aliases:
-                        match = p_data
-                        break
-                        
+            match = self._find_pantry_match(req_id, req_name, aliases, pantry_dict)
             if match:
-                if req_amount > 0:
-                    req_unit = str(req.get("unit") or "").lower().strip()
-                    p_unit = str(match.get("unit") or "").lower().strip()
-                    
-                    # Convert to base units for comparison
-                    def get_base(amt, u):
-                        if u in ["kg", "kilogram", "kilograms"]:
-                            return amt * 1000.0, "g"
-                        if u in ["g", "gram", "grams"]:
-                            return amt, "g"
-                        if u in ["l", "liter", "litre", "liters"]:
-                            return amt * 1000.0, "ml"
-                        if u in ["ml", "milliliter", "milliliters"]:
-                            return amt, "ml"
-                        return amt, u
-                        
-                    req_base_amt, req_base_u = get_base(req_amount, req_unit)
-                    p_base_amt, p_base_u = get_base(float(match['amount']), p_unit)
-                    
-                    if req_base_u == p_base_u and req_base_amt > 0:
-                        ratio = min(1.0, p_base_amt / req_base_amt)
-                    else:
-                        ratio = min(1.0, float(match['amount']) / req_amount)
-                        
-                    total_ratio += ratio
-                else:
-                    total_ratio += 1.0 # Just needs a pinch
+                total_ratio += self._calculate_ingredient_ratio(req, match)
                 
         return total_ratio / len(required)
 

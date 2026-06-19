@@ -73,8 +73,8 @@ async def get_recommendations(request: RecommendationRequest):
         
         scores = [RecipeScore(recipeId=res[0], score=res[1]) for res in raw_results]
         return AiRecommendationResponse(recipes=scores)
-    except Exception as e:
-        logger.error(f"Öneri hatası: {str(e)}")
+    except Exception:
+        logger.exception("Öneri hatası")
         raise HTTPException(status_code=500, detail="Öneri oluşturulamadı.")
 
 @app.post("/api/v1/recipes/sync", dependencies=[Depends(get_api_key)])

@@ -2,7 +2,7 @@ name: AI Service CD Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
 
 concurrency:
   group: cd-ai-${{ github.ref }}

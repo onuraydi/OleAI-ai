@@ -42,6 +42,9 @@ jobs:
             # Login to ACR on the VM
             echo "${{ secrets.ACR_PASSWORD }}" | docker login ${{ secrets.ACR_LOGIN_SERVER }} -u ${{ secrets.ACR_USERNAME }} --password-stdin
             
+            # Export variable so docker compose can read it for the image tags
+            export ACR_LOGIN_SERVER=${{ secrets.ACR_LOGIN_SERVER }}
+            
             # Pull new image and restart services
             docker compose -f docker-compose.prod.yml pull ai
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
